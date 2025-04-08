@@ -1,0 +1,81 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+// Enable error logging
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/contact_errors.log');
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        // Debug: Log POST data
+        error_log("Received POST data: " . print_r($_POST, true));
+        
+        // Validate required fields
+        if (empty($_POST['name']) || empty($_POST['email']) || empty($_POST['phone'])) {
+            throw new Exception('Все обязательные поля должны быть заполнены');
+        }
+
+        // Validate email
+        if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('Некорректный email адрес');
+        }
+
+        // Sanitize inputs
+        $name = htmlspecialchars($_POST['name']);
+        $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
+        $phone = htmlspecialchars($_POST['phone']);
+        $message = htmlspecialchars($_POST['message'] ?? '');
+        $tour = htmlspecialchars($_POST['tour'] ?? '');
+
+        // Debug: Verify database connection
+        error_log("Database connection status: " . ($conn ? "Connected" : "Not connected"));
+        
+        // Debug: Log SQL query and parameters
+        $sql = "INSERT INTO contact_requests (name, email, phone, message, tour) VALUES (:name, :email, :phone, :message, :tour)";
+        $params = [
+            ':name' => $name,
+            ':email' => $email,
+            ':phone' => $phone,
+            ':message' => $message,
+            ':tour' => $tour
+        ];
+        error_log("SQL: $sql with params: " . print_r($params, true));
+
+        // Execute with detailed error handling
+        try {
+            $stmt = $conn->prepare($sql);
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . print_r($conn->errorInfo(), true));
+            }
+
+            $result = $stmt->execute($params);
+            if (!$result) {
+                throw new Exception("Execute failed: " . print_r($stmt->errorInfo(), true));
+            }
+
+            error_log("Insert successful, last ID: " . $conn->lastInsertId());
+        } catch (PDOException $e) {
+            error_log("PDO Exception: " . $e->getMessage());
+            throw $e;
+        } catch (Exception $e) {
+            error_log("General Exception: " . $e->getMessage());
+            throw $e;
+        }
+
+        // Redirect with success
+        header('Location: /index.php?success=1');
+        exit;
+    } catch (Exception $e) {
+        // Log the full error
+        error_log("Error: " . $e->getMessage());
+        
+        // For debugging - output error instead of redirect
+        die("Error: " . $e->getMessage());
+    }
+} else {
+    // If not POST request, redirect to home
+    header('Location: /index.php');
+    exit;
+}
+?>
